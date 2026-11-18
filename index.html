@@ -1,0 +1,808 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>XM Trade Monitor</title>
+<style>
+:root{
+  --bg:#f5f6f8; --panel:#ffffff; --panel2:#f0f2f5; --ink:#1b1f24; --muted:#667085; --line:#e3e6ea;
+  --accent:#2f6fdf; --pos:#118a4e; --neg:#d0342c; --warn:#b26a00; --tp:#118a4e; --sl:#d0342c; --chip:#eef2fb;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1216; --panel:#171b21; --panel2:#1e232b; --ink:#e7eaee; --muted:#9aa4b2; --line:#2a313b;
+    --accent:#6c9dff; --pos:#3ccf7f; --neg:#ff6b61; --warn:#f0b04a; --tp:#3ccf7f; --sl:#ff6b61; --chip:#222a38;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f1216; --panel:#171b21; --panel2:#1e232b; --ink:#e7eaee; --muted:#9aa4b2; --line:#2a313b;
+  --accent:#6c9dff; --pos:#3ccf7f; --neg:#ff6b61; --warn:#f0b04a; --tp:#3ccf7f; --sl:#ff6b61; --chip:#222a38;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 "Segoe UI",system-ui,-apple-system,sans-serif}
+header{position:sticky;top:0;z-index:5;background:var(--panel);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+header h1{font-size:17px;margin:0;font-weight:650}
+.status{font-size:12px;color:var(--muted)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--muted);margin-right:5px;vertical-align:middle}
+.dot.ok{background:var(--pos)} .dot.err{background:var(--neg)}
+nav{display:flex;gap:4px;margin-left:auto}
+nav button,.btn{border:1px solid var(--line);background:var(--panel2);color:var(--ink);padding:6px 11px;border-radius:7px;cursor:pointer;font:inherit;font-size:13px}
+nav button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.small{padding:3px 8px;font-size:12px}
+.btn.danger{color:var(--neg)}
+main{padding:14px 16px 40px;max-width:1500px;margin:0 auto}
+.tab{display:none}.tab.on{display:block}
+.strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:14px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 11px}
+.kpi .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.kpi .v{font-size:18px;font-weight:650;font-variant-numeric:tabular-nums}
+.kpi input{width:100%;font-size:17px;font-weight:650;border:0;border-bottom:1px dashed var(--line);background:transparent;color:var(--ink);padding:0}
+.pos{color:var(--pos)} .neg{color:var(--neg)} .mut{color:var(--muted)} .warn{color:var(--warn)}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 12px}
+.toolbar .sp{flex:1}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{padding:5px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;font-weight:600;position:sticky;top:0;background:var(--panel)}
+th:first-child,td:first-child{text-align:left}
+.tblwrap{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:auto;margin-bottom:14px}
+.tblwrap.tall{max-height:72vh}
+th.sort{cursor:pointer}
+th.sort:hover{color:var(--ink)}
+tr.tot td{font-weight:650;border-top:2px solid var(--line)}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(400px,1fr));gap:12px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;min-width:0}
+@media (max-width:480px){.cards{grid-template-columns:minmax(0,1fr)}.grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}.legs input{width:66px}.legs td,.legs th{padding:3px 2px}.legs .tk{display:none}main{padding:12px 16px 40px}nav{margin-left:0}}
+.card h3{margin:0;font-size:16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.tag{font-size:11px;padding:2px 7px;border-radius:20px;background:var(--chip);color:var(--muted);font-weight:600}
+.tag.long{background:color-mix(in srgb,var(--pos) 18%,transparent);color:var(--pos)}
+.tag.short{background:color-mix(in srgb,var(--neg) 18%,transparent);color:var(--neg)}
+.card .px{margin-left:auto;font-size:18px;font-weight:650;font-variant-numeric:tabular-nums}
+.src{font-size:11px;color:var(--muted);margin:2px 0 8px}
+.legs td,.legs th{padding:3px 5px}
+.legs input{width:88px;text-align:right}
+input,select{font:inherit;color:var(--ink);background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:3px 6px}
+input[type=number]{font-variant-numeric:tabular-nums}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:10px}
+.cell{background:var(--panel2);border-radius:8px;padding:6px 8px;min-width:0}
+.cell .l{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cell .v{font-weight:650;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cell input{width:100%;font-weight:650}
+.cell.tp{box-shadow:inset 3px 0 var(--tp)} .cell.sl{box-shadow:inset 3px 0 var(--sl)}
+.bar{position:relative;height:22px;margin:12px 4px 2px;border-radius:6px;background:linear-gradient(90deg,color-mix(in srgb,var(--sl) 25%,transparent),var(--panel2) 50%,color-mix(in srgb,var(--tp) 25%,transparent))}
+.bar .mk{position:absolute;top:-3px;width:3px;height:28px;border-radius:2px;background:var(--ink)}
+.bar .avg{position:absolute;top:0;width:2px;height:22px;background:var(--muted)}
+.bar .lab{position:absolute;top:24px;font-size:10px;color:var(--muted);transform:translateX(-50%);white-space:nowrap}
+.foot{display:flex;gap:8px;margin-top:14px;justify-content:space-between;align-items:center;flex-wrap:wrap}
+.note{font-size:12px;color:var(--muted);margin:8px 0}
+.settings{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.settings label{display:block;font-size:12px;color:var(--muted);margin-bottom:3px}
+.settings .card input,.settings .card select{width:100%}
+textarea{width:100%;min-height:180px;font:12px/1.4 Consolas,monospace;color:var(--ink);background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:6px}
+dialog{border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);max-width:420px;width:92vw}
+dialog::backdrop{background:rgba(0,0,0,.35)}
+#shotDlg{max-width:820px}
+#shotDlg table input,#shotDlg table select{width:100%;min-width:64px}
+#shotDlg td{padding:3px 4px}
+#shotDlg .chk{white-space:normal;text-align:left;font-size:12px;min-width:150px}
+#shotDlg .acctrow{display:flex;flex-wrap:wrap;gap:10px;align-items:end;margin:10px 0}
+#shotDlg .acctrow label{margin:0;display:inline-flex;gap:6px;align-items:center;color:var(--ink);font-size:13px}
+#shotDlg input[type=checkbox],#shotDlg input[type=radio]{width:auto;min-width:0}
+#shotDlg .chk{min-width:220px;max-width:260px}
+#shotDlg .acctrow input[type=number]{width:110px}
+body.dragging main{outline:3px dashed var(--accent);outline-offset:-6px}
+dialog label{display:block;font-size:12px;color:var(--muted);margin:8px 0 3px}
+dialog input,dialog select{width:100%}
+.hl{background:color-mix(in srgb,var(--warn) 14%,transparent)}
+.empty{padding:30px;text-align:center;color:var(--muted);background:var(--panel);border:1px dashed var(--line);border-radius:12px}
+</style>
+</head>
+<body>
+<header>
+  <h1>XM Trade Monitor <span class="mut" style="font-weight:400" id="acctName"></span></h1>
+  <span class="status"><span class="dot" id="dot"></span><span id="stat">loading prices…</span></span>
+  <nav>
+    <button data-tab="pos" class="on">Positions</button>
+    <button data-tab="fx">FX pip values</button>
+    <button data-tab="cfd">Indices &amp; CFDs</button>
+    <button data-tab="set">Settings</button>
+  </nav>
+</header>
+<main>
+<!-- POSITIONS -->
+<section class="tab on" id="tab-pos">
+  <div class="strip" id="acct"></div>
+  <div class="toolbar">
+    <button class="btn primary" id="addPos">+ Add position</button>
+    <label class="btn" title="Or press Ctrl+V with a screenshot copied, or drop an image on the page">Read screenshot (or Ctrl+V)<input type="file" id="shotFile" accept="image/*" hidden></label>
+    <label class="btn">Import MT4 statement (.htm)<input type="file" id="stmtFile" accept=".htm,.html" hidden></label>
+    <span class="note" id="stmtInfo"></span>
+    <span class="sp"></span>
+    <button class="btn" id="refreshNow">Refresh now</button>
+  </div>
+  <div class="tblwrap" id="sumWrap"></div>
+  <div class="cards" id="cards"></div>
+</section>
+
+<!-- FX PIP TABLE -->
+<section class="tab" id="tab-fx">
+  <div class="toolbar">
+    <label>Lots <input type="number" id="fxLots" value="1" step="0.01" min="0.01" style="width:80px"></label>
+    <label>Filter <input id="fxFilter" placeholder="e.g. JPY, EUR" style="width:140px"></label>
+    <label><input type="checkbox" id="fxMine"> only currencies in my positions</label>
+    <span class="sp"></span>
+    <span class="note">Pip value, margin &amp; swap use XM's All-in-One calculator formulas and XM Standard-account specs, priced with live rates.</span>
+  </div>
+  <div class="tblwrap tall" id="fxWrap"></div>
+  <p class="note">Pip = 10 × the instrument's last price digit (XM definition: 0.0001 for 5-digit pairs, 0.01 for JPY pairs, 0.1 for GOLD). Pip value only changes when the <b>quote</b> currency moves against USD — USD-quoted pairs stay fixed. "Δ prev close" compares with the pip value at yesterday's close; "Δ session" with the first value since this page was opened. Margin = lots × contract × base→USD ÷ leverage (XM leverage caps applied, e.g. 1:400 on CHF pairs, 1:50 on HKD/DKK/CNH).</p>
+</section>
+
+<!-- CFD TABLE -->
+<section class="tab" id="tab-cfd">
+  <div class="toolbar">
+    <label>Lots <input type="number" id="cfdLots" value="1" step="0.01" min="0.01" style="width:80px"></label>
+    <span class="sp"></span>
+  </div>
+  <div class="tblwrap" id="cfdWrap"></div>
+  <p class="note">Indices, oil and crypto are not in XM's calculator. Value per point was worked out from your own closed trades in the XM statement (GER40 €1, HK50 HK$1, JP225 ¥1, US indices $1, UK100 £1 per point per lot; Brent 100 bbl; BTC 1 coin). Prices come from the closest TradingView feed — cash-index and futures feeds can differ from XM's CFD by a few points, and feeds marked <i>delayed</i> lag 10–15 min.<br>
+  <b>Margin</b> follows XM: lots × contract × price × (profit ccy→USD) ÷ min(account leverage, instrument leverage). Instrument leverage is XM's Standard-account maximum from xm.com (Equity indices, Energies, Crypto pages, read 18 Nov 2026): US30 / US100 / US500 / UK100 / GER40 / JP225 1:500, HK50 1:66.67, OILCash &amp; BRENTCash 1:200, OIL &amp; BRENT futures 1:66.67, BTC &amp; ETH 1:1000. Open positions use their open price, as MT4 does. The estimate uses the TradingView price, so expect a small gap to MT4.</p>
+</section>
+
+<!-- SETTINGS -->
+<section class="tab" id="tab-set">
+  <div class="settings">
+    <div class="card">
+      <label>Account label (shown in the title, e.g. account number)</label>
+      <input id="sAcctLabel" maxlength="40" style="margin-bottom:10px">
+      <label>Account leverage (FX &amp; metals)</label>
+      <select id="sLev"></select>
+      <label style="margin-top:10px">Fallback leverage for a CFD that XM's pages don't list (indices, oil, crypto use XM's own figures)</label>
+      <input type="number" id="sCfdLev" step="1" min="1">
+      <label style="margin-top:10px">Account type</label>
+      <select id="sAcct"><option value="std">Standard (1 lot = 100,000)</option><option value="micro">Micro (1 lot = 1,000)</option></select>
+    </div>
+    <div class="card">
+      <label>THB rate</label>
+      <select id="sThbMode"><option value="live">Live USDTHB</option><option value="fixed">Fixed rate</option></select>
+      <label style="margin-top:10px">Fixed USD→THB rate</label>
+      <input type="number" id="sThb" step="0.01">
+      <label style="margin-top:10px">Refresh every (seconds)</label>
+      <input type="number" id="sRefresh" min="5" step="1">
+      <label style="margin-top:10px">Theme</label>
+      <select id="sTheme"><option value="">Follow system</option><option value="light">Light</option><option value="dark">Dark</option></select>
+    </div>
+    <div class="card">
+      <label>Price feed overrides (one per line: <code>SYMBOL=EXCHANGE:TICKER</code>)</label>
+      <textarea id="sTickers" style="min-height:120px" placeholder="JP225Cash=TVC:NI225"></textarea>
+      <div class="note">Defaults: GER40Cash=OANDA:DE30EUR, HK50Cash=OANDA:HK33HKD, JP225Cash=CME:NIY1!, BRENT &amp; BRENTCash=FX:UKOIL, FX pairs=OANDA:&lt;pair&gt;.</div>
+    </div>
+    <div class="card">
+      <label>Backup / restore positions</label>
+      <div class="toolbar"><button class="btn" id="exportBtn">Export JSON</button><label class="btn">Import JSON<input type="file" id="importJson" accept=".json" hidden></label><button class="btn danger" id="resetBtn">Clear all positions</button></div>
+      <div class="note">Positions are saved in this browser only (localStorage). Nothing is uploaded anywhere: the page only downloads prices from TradingView's public scanner.</div>
+    </div>
+  </div>
+</section>
+</main>
+
+<dialog id="dlg">
+  <form method="dialog" id="dlgForm">
+    <h3 style="margin:0 0 6px">Add position</h3>
+    <label>Symbol</label><input id="dSym" list="symList" required placeholder="EURUSD, GOLD, GER40Cash…">
+    <datalist id="symList"></datalist>
+    <label>Direction</label><select id="dDir"><option>Long</option><option>Short</option></select>
+    <label>Lots</label><input id="dLots" type="number" step="0.01" min="0.01" value="0.1" required>
+    <label>Entry price (blank = current)</label><input id="dPrice" type="number" step="any">
+    <label>Target price</label><input id="dTp" type="number" step="any">
+    <label>Stop-loss price</label><input id="dSl" type="number" step="any">
+    <div class="foot"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" value="ok">Add</button></div>
+  </form>
+</dialog>
+
+<dialog id="shotDlg">
+  <h3 style="margin:0 0 4px">Positions from screenshot</h3>
+  <div id="shotBody"></div>
+</dialog>
+
+<script>
+"use strict";
+/* ---------- XM Standard-account specs, captured from xm.com All-in-One calculator (2026-11-18) ----------
+   [symbol, base, profitCcy, marginCcy, contract, digits, swapLongPts, swapShortPts, mode(F=FOREX,C=CFD_LEVERAGE), cappedLeverage, marginFactor, description] */
+const XM_STD=[["XAUJPY","XAUJPY","JPY","JPY",100,0,-120.79,-0.34,"C",0,1,"Gold vs JPY"],["XAUCNH","XAUCNH","CNH","CNH",100,2,-409.7,-40.47,"C",400,1,"Gold vs CNH"],["GAUUSD","GAUUSD","USD","USD",1000,3,-24.25,5.2,"C",0,1,"Gold (gram) vs USD"],["GAUCNH","GAUCNH","CNH","CNH",1000,2,-13.17,-1.3,"C",400,1,"Gold (gram) vs CNH"],["XAUEUR","XAUEUR","EUR","EUR",100,2,-82.99,10.04,"C",0,1,"Gold vs Euro"],["USDCNH","USD","CNH","USD",100000,4,0.13,-10.68,"F",50,1,"US Dollar vs Renminbi"],["SILVER","SILVER","USD","USD",5000,3,-14.79,3.31,"C",400,1,"SILVER"],["GOLD","GOLD","USD","USD",100,2,-75.42,16.17,"C",0,1,"GOLD"],["USDZAR","USD","ZAR","USD",100000,4,-40.99,4.61,"F",0,1,"US Dollar vs South African Rand"],["USDSEK","USD","SEK","USD",100000,5,-22.36,-139.42,"F",0,1,"US Dollar vs Swedish Krona"],["USDNOK","USD","NOK","USD",100000,5,-87.73,-58.75,"F",0,1,"US Dollar vs Norwegian Krone"],["USDMXN","USD","MXN","USD",100000,5,-333.48,54.02,"F",0,1,"US Dollar vs Mexican Peso"],["USDHKD","USD","HKD","USD",100000,4,-2.47,-9.63,"F",50,1,"US Dollar vs Hong Kong Dollar"],["USDDKK","USD","DKK","USD",100000,5,-15.79,-88.25,"F",50,1,"US Dollar vs Danish Krone"],["GBPSEK","GBP","SEK","GBP",100000,5,-30.64,-186.36,"F",0,1,"Great Britain Pound vs Swedish Krona"],["GBPNOK","GBP","NOK","GBP",100000,5,-118.12,-78.98,"F",0,1,"Great Britain Pound vs Norwegian Krone"],["GBPDKK","GBP","DKK","GBP",100000,5,-21.6,-119.56,"F",50,1,"Great Britain Pound vs Danish Krone"],["EURZAR","EUR","ZAR","EUR",100000,5,-404.4,37.31,"F",0,1,"Euro vs South African Rand"],["EURSEK","EUR","SEK","EUR",100000,5,-70.91,-108.03,"F",0,1,"Euro vs Swedish Krona"],["EURNOK","EUR","NOK","EUR",100000,5,-143.07,-17.92,"F",0,1,"Euro vs Norwegian Krone"],["EURHKD","EUR","HKD","EUR",100000,5,-63.98,-68.95,"F",50,1,"Euro vs Hong Kong Dollar"],["EURDKK","EUR","DKK","EUR",100000,5,-49.36,-68,"F",50,1,"Euro vs Danish Krone"],["USDPLN","USD","PLN","USD",100000,5,-27.87,-31.76,"F",0,1,"US Dollar vs Polish Zloty"],["USDHUF","USD","HUF","USD",100000,3,-53.75,-24.75,"F",0,1,"US Dollar vs Hungarian Forint"],["USDTRY","USD","TRY","USD",100000,5,-6982.52,461.03,"F",100,1,"US Dollar vs Turkish Lira"],["USDSGD","USD","SGD","USD",100000,5,-5.89,-17.5,"F",0,1,"US Dollar vs Singapore Dollar"],["SGDJPY","SGD","JPY","SGD",100000,3,-9.41,-9.41,"F",0,1,"Singapore Dollar vs Japanese Yen"],["NZDUSD","NZD","USD","NZD",100000,5,-4.62,-0.41,"F",0,1,"New Zealand Dollar vs US Dollar"],["NZDSGD","NZD","SGD","NZD",100000,5,-7.25,-8.26,"F",0,1,"New Zealand Dollar vs Singapore Dollar"],["NZDJPY","NZD","JPY","NZD",100000,3,-3.84,-11.72,"F",0,1,"New Zealand Dollar vs Japanese Yen"],["NZDCHF","NZD","CHF","NZD",100000,5,0.8,-6.31,"F",400,1,"New Zealand Dollar vs Swiss Franc"],["NZDCAD","NZD","CAD","NZD",100000,5,-4.15,-4.64,"F",0,1,"New Zealand Dollar vs Canadian Dollar"],["GBPSGD","GBP","SGD","GBP",100000,5,-7.92,-23.39,"F",0,1,"Great Britain Pound vs Singapore Dollar"],["GBPNZD","GBP","NZD","GBP",100000,5,-2.23,-21.03,"F",0,1,"Great Britain Pound vs New Zealand Dollar"],["GBPAUD","GBP","AUD","GBP",100000,5,-12.31,-3.86,"F",0,1,"Great Britain Pound vs Australian Dollar"],["EURTRY","EUR","TRY","EUR",100000,5,-6562.17,539.83,"F",100,1,"Euro vs Turkish Lira"],["EURSGD","EUR","SGD","EUR",100000,5,-12.41,-13.5,"F",0,1,"Euro vs Singapore Dollar"],["EURPLN","EUR","PLN","EUR",100000,5,-48.61,-18.68,"F",0,1,"Euro vs Polish Zloty"],["EURHUF","EUR","HUF","EUR",100000,3,-74.35,-12.19,"F",0,1,"Euro vs Hungarian Forint"],["CHFSGD","CHF","SGD","CHF",100000,5,-24.86,-3.28,"F",400,1,"Swiss Franc vs Singapore Dollar"],["EURNZD","EUR","NZD","EUR",100000,5,-10.54,-8.74,"F",0,1,"Euro vs New Zealand Dollar"],["EURAUD","EUR","AUD","EUR",100000,5,-17.48,3.92,"F",0,1,"Euro vs Australian Dollar"],["AUDJPY","AUD","JPY","AUD",100000,3,4.29,-16.81,"F",0,1,"Australian Dollar vs Japanese Yen"],["AUDCHF","AUD","CHF","AUD",100000,5,5.56,-10.32,"F",400,1,"Australian Dollar vs Swiss Franc"],["AUDCAD","AUD","CAD","AUD",100000,5,2.25,-10.38,"F",0,1,"Australian Dollar vs Canadian Dollar"],["AUDNZD","AUD","NZD","AUD",100000,5,0.17,-15.12,"F",0,1,"Australian Dollar vs New Zealand Dollar"],["AUDUSD","AUD","USD","AUD",100000,5,-0.46,-3.75,"F",0,1,"Australian Dollar vs US Dollar"],["USDJPY","USD","JPY","USD",100000,3,2.11,-29.59,"F",0,1,"US Dollar vs Japanese Yen"],["USDCHF","USD","CHF","USD",100000,5,5.11,-14.26,"F",400,1,"US Dollar vs Swiss Franc"],["USDCAD","USD","CAD","USD",100000,5,1.88,-9.81,"F",0,1,"US Dollar vs Canadian Dollar"],["GBPUSD","GBP","USD","GBP",100000,5,-3.66,-3.84,"F",0,1,"Great Britain Pound vs US Dollar"],["GBPJPY","GBP","JPY","GBP",100000,3,3.09,-40.51,"F",0,1,"Great Britain Pound vs Japanese Yen"],["GBPCHF","GBP","CHF","GBP",100000,5,6.53,-19.07,"F",400,1,"Great Britain Pound vs Swiss Franc"],["GBPCAD","GBP","CAD","GBP",100000,5,-0.05,-15.65,"F",0,1,"Great Britain Pound vs Canadian Dollar"],["EURUSD","EUR","USD","EUR",100000,5,-7.83,1.44,"F",0,1,"Euro vs US Dollar"],["EURJPY","EUR","JPY","EUR",100000,3,-4.97,-19.53,"F",0,1,"Euro vs Japanese Yen"],["EURGBP","EUR","GBP","EUR",100000,5,-5.87,1.12,"F",0,1,"Euro vs Great Britain Pound"],["EURCHF","EUR","CHF","EUR",100000,5,1.73,-12.18,"F",400,1,"Euro vs Swiss Franc"],["EURCAD","EUR","CAD","EUR",100000,5,-6.55,-6.38,"F",0,1,"Euro vs Canadian Dollar"],["CHFJPY","CHF","JPY","CHF",100000,3,-17.1,-4.75,"F",400,1,"Swiss Franc vs Japanese Yen"],["CADJPY","CAD","JPY","CAD",100000,3,-1.53,-10.82,"F",0,1,"Canadian Dollar vs Japanese Yen"],["CADCHF","CAD","CHF","CAD",100000,5,1.85,-6.71,"F",400,1,"Canadian Dollar vs Swiss Franc"]];
+const XM_SPEC_DATE="2026-11-18";
+const OZ_PER_GRAM=1/31.1034768;
+/* metal symbols: underlying metal + factor (per unit quoted) */
+const METAL={GOLD:["XAU",1],SILVER:["XAG",1],XAUEUR:["XAU",1],XAUJPY:["XAU",1],XAUCNH:["XAU",1],GAUUSD:["XAU",OZ_PER_GRAM],GAUCNH:["XAU",OZ_PER_GRAM]};
+const METAL_TICK={GOLD:["OANDA:XAUUSD","TVC:GOLD"],SILVER:["OANDA:XAGUSD","TVC:SILVER"],XAUEUR:["OANDA:XAUEUR"],XAUJPY:["OANDA:XAUJPY"]};
+/* CFDs not in XM's calculator. ppl = value per 1.00 price move per lot, in profit ccy (from the user's own XM statement).
+   lev = XM maximum leverage, Standard account, from xm.com/th/equity-indices, /th/energies, /th/cryptocurrencies (read 2026-11-18).
+   XM margin = lots × contract × open price ÷ min(account leverage, instrument leverage). */
+const CFD=[
+ {name:"US30Cash",q:"USD",ppl:1,d:2,lev:500,kind:"Index",desc:"US 30",t:["OANDA:US30USD","CBOT_MINI:YM1!","TVC:DJI"]},
+ {name:"US100Cash",q:"USD",ppl:1,d:2,lev:500,kind:"Index",desc:"US Tech 100",t:["OANDA:NAS100USD","CME_MINI:NQ1!","NASDAQ:NDX"]},
+ {name:"US500Cash",q:"USD",ppl:1,d:2,lev:500,kind:"Index",desc:"US 500",t:["OANDA:SPX500USD","CME_MINI:ES1!","SP:SPX"]},
+ {name:"UK100Cash",q:"GBP",ppl:1,d:2,lev:500,kind:"Index",desc:"UK 100",t:["OANDA:UK100GBP","TVC:UKX","ICEEUR:Z1!"]},
+ {name:"GER40Cash",q:"EUR",ppl:1,d:2,lev:500,kind:"Index",desc:"Germany 40",t:["OANDA:DE30EUR","TVC:DEU40","EUREX:FDAX1!"]},
+ {name:"JP225Cash",q:"JPY",ppl:1,d:2,lev:500,kind:"Index",desc:"Japan 225",t:["CME:NIY1!","TVC:NI225","OSE:NK2251!"]},
+ {name:"HK50Cash",q:"HKD",ppl:1,d:2,lev:66.67,kind:"Index",desc:"Hong Kong 50",t:["OANDA:HK33HKD","TVC:HSI","HKEX:HSI1!"]},
+ {name:"BRENTCash",q:"USD",ppl:100,d:2,lev:200,kind:"Energy",desc:"Brent crude cash",t:["FX:UKOIL","ICEEUR:BRN1!"]},
+ {name:"BRENT",q:"USD",ppl:100,d:2,lev:66.67,kind:"Energy",desc:"Brent crude futures (XM BRENT-Mon00)",t:["FX:UKOIL","ICEEUR:BRN1!"]},
+ {name:"OILCash",q:"USD",ppl:100,d:2,lev:200,kind:"Energy",desc:"WTI crude cash",t:["FX:USOIL","NYMEX:CL1!"]},
+ {name:"OIL",q:"USD",ppl:100,d:2,lev:66.67,kind:"Energy",desc:"WTI crude futures (XM OIL-Mon00)",t:["FX:USOIL","NYMEX:CL1!"]},
+ {name:"BTCUSD",q:"USD",ppl:1,d:2,lev:1000,kind:"Crypto",desc:"Bitcoin",t:["BITSTAMP:BTCUSD","COINBASE:BTCUSD"]},
+ {name:"ETHUSD",q:"USD",ppl:1,d:2,lev:1000,kind:"Crypto",desc:"Ethereum",t:["BITSTAMP:ETHUSD","COINBASE:ETHUSD"]}
+];
+/* currency -> USD legs: [ticker list, +1 = CCYUSD, -1 = USDCCY] */
+const USD_LEGS={EUR:[["OANDA:EURUSD","FX_IDC:EURUSD"],1],GBP:[["OANDA:GBPUSD","FX_IDC:GBPUSD"],1],AUD:[["OANDA:AUDUSD","FX_IDC:AUDUSD"],1],NZD:[["OANDA:NZDUSD","FX_IDC:NZDUSD"],1],
+ JPY:[["OANDA:USDJPY","FX_IDC:USDJPY"],-1],CHF:[["OANDA:USDCHF","FX_IDC:USDCHF"],-1],CAD:[["OANDA:USDCAD","FX_IDC:USDCAD"],-1],SGD:[["OANDA:USDSGD","FX_IDC:USDSGD"],-1],
+ HKD:[["OANDA:USDHKD","FX_IDC:USDHKD"],-1],SEK:[["OANDA:USDSEK","FX_IDC:USDSEK"],-1],NOK:[["OANDA:USDNOK","FX_IDC:USDNOK"],-1],DKK:[["OANDA:USDDKK","FX_IDC:USDDKK"],-1],
+ ZAR:[["OANDA:USDZAR","FX_IDC:USDZAR"],-1],MXN:[["OANDA:USDMXN","FX_IDC:USDMXN"],-1],PLN:[["OANDA:USDPLN","FX_IDC:USDPLN"],-1],HUF:[["OANDA:USDHUF","FX_IDC:USDHUF"],-1],
+ TRY:[["OANDA:USDTRY","FX_IDC:USDTRY"],-1],CNH:[["OANDA:USDCNH","FX_IDC:USDCNH"],-1],THB:[["FX_IDC:USDTHB","OANDA:USDTHB"],-1],
+ XAU:[["OANDA:XAUUSD","TVC:GOLD"],1],XAG:[["OANDA:XAGUSD","TVC:SILVER"],1]};
+const LEVERAGES=[1000,888,500,400,200,100,50,30,25,20,10,5,1];
+
+/* ---------- catalog ---------- */
+const CAT={};
+for(const r of XM_STD){
+  const [name,base,q,mc,contract,digits,swL,swS,mode,cap,mf,desc]=r;
+  const metal=METAL[name];
+  CAT[name]={name,base,q,mc,contract,digits,swL,swS,mode,cap,desc,kind:metal?"Metal":"FX",metal,
+    point:Math.pow(10,-digits), xmPip:Math.pow(10,-digits)*10,
+    posPip: metal?1:Math.pow(10,-digits)*10,   /* positions: FX in XM pips, metals in 1.00 moves (as in the Excel tab) */
+    t: metal?(METAL_TICK[name]||[]):["OANDA:"+name,"FX_IDC:"+name]};
+}
+for(const c of CFD){CAT[c.name]={name:c.name,q:c.q,contract:c.ppl,digits:c.d,mode:"CFD",kind:c.kind,desc:c.desc,cap:0,lev:c.lev,point:Math.pow(10,-c.d),posPip:1,xmPip:1,t:c.t,swL:null,swS:null};}
+function canon(s){
+  if(!s)return null; s=String(s).trim(); const lo=s.toLowerCase().replace(/[.#].*$/,"");
+  for(const k in CAT) if(k.toLowerCase()===lo) return k;
+  if(/^brent/.test(lo)) return /cash/.test(lo)?"BRENTCash":"BRENT";
+  if(/^(oil|wti)/.test(lo)) return /cash/.test(lo)?"OILCash":"OIL";
+  if(lo==="xauusd") return "GOLD"; if(lo==="xagusd") return "SILVER";
+  if(/^btc/.test(lo)) return "BTCUSD"; if(/^eth/.test(lo)) return "ETHUSD";
+  const m={ger40:"GER40Cash",de40:"GER40Cash",dax:"GER40Cash",hk50:"HK50Cash",jp225:"JP225Cash",us30:"US30Cash",us100:"US100Cash",nas100:"US100Cash",us500:"US500Cash",spx500:"US500Cash",uk100:"UK100Cash",eu50:"EU50Cash"};
+  for(const p in m) if(lo.startsWith(p)) return m[p];
+  return null;
+}
+
+/* ---------- state ---------- */
+const LS="xmTradeMonitor.v1";
+/*SEED-START*/
+const SEED={ /* empty: positions are added by each visitor and kept in their own browser */
+  settings:{lev:1000,cfdLev:100,acct:"std",thbMode:"live",thb:31,refresh:15,theme:"",tickers:"",acctLabel:""},
+  account:{balance:0,credit:0,asOf:""},
+  groups:[]
+};
+/*SEED-END*/
+function load(){try{const s=JSON.parse(localStorage.getItem(LS));if(s&&s.groups)return Object.assign(structuredClone(SEED),s,{settings:Object.assign({},SEED.settings,s.settings)});}catch(e){} return structuredClone(SEED);}
+let S=load();
+function save(){try{localStorage.setItem(LS,JSON.stringify(S));}catch(e){}}
+
+/* ---------- quotes ---------- */
+const Q={};          // ticker -> {bid,ask,close,chg,mode}
+const SESSION0={};   // first pip value seen per symbol this session
+let lastOk=0, timer=null, fetching=false;
+function overrides(){const o={};(S.settings.tickers||"").split(/\n/).forEach(l=>{const m=l.split("=");if(m.length===2){const k=canon(m[0]);if(k)o[k]=m[1].trim();}});return o;}
+function tickersFor(sym){const o=overrides();const c=CAT[sym];return o[sym]?[o[sym],...(c?c.t:[])]:(c?c.t:[]);}
+function allTickers(){
+  const set=new Set();
+  for(const k in USD_LEGS) USD_LEGS[k][0].forEach(t=>set.add(t));
+  for(const g of S.groups) tickersFor(g.sym).forEach(t=>set.add(t));
+  for(const c of CFD) tickersFor(c.name).forEach(t=>set.add(t));
+  ["OANDA:XAUEUR","OANDA:XAUJPY"].forEach(t=>set.add(t));
+  return [...set];
+}
+async function fetchQuotes(){
+  if(fetching)return; fetching=true;
+  try{
+    const body=JSON.stringify({symbols:{tickers:allTickers()},columns:["close","bid","ask","change","update_mode"]});
+    const r=await fetch("https://scanner.tradingview.com/global/scan",{method:"POST",body,headers:{"Content-Type":"text/plain"}});
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    const j=await r.json();
+    for(const row of j.data||[]){const [close,bid,ask,chg,mode]=row.d;Q[row.s]={close,bid,ask,chg,mode,ts:Date.now()};}
+    lastOk=Date.now(); setStat(true,"live · "+new Date().toLocaleTimeString()+" · TradingView");
+  }catch(e){setStat(false,"price fetch failed ("+e.message+") — retrying");}
+  fetching=false; renderAll();
+}
+function setStat(ok,msg){document.getElementById("dot").className="dot "+(ok?"ok":"err");document.getElementById("stat").textContent=msg;}
+function schedule(){clearInterval(timer);timer=setInterval(fetchQuotes,Math.max(5,+S.settings.refresh||15)*1000);}
+function q1(list){for(const t of list){const x=Q[t];if(x&&(x.bid||x.close))return Object.assign({t},x);}return null;}
+function mid(x){return x? (x.bid&&x.ask?(x.bid+x.ask)/2:x.close):NaN;}
+function prevClose(x){return x&&x.close&&x.chg!=null?x.close/(1+x.chg/100):NaN;}
+/* ccy -> USD value of 1 unit */
+function usd(ccy,prev){
+  if(ccy==="USD")return 1;
+  const L=USD_LEGS[ccy]; if(!L)return NaN; const x=q1(L[0]); if(!x)return NaN;
+  const p=prev?prevClose(x):mid(x); return L[1]>0?p:1/p;
+}
+function thbRate(){return S.settings.thbMode==="fixed"?+S.settings.thb:1/usd("THB");}
+function contract(c){return S.settings.acct==="micro"&&c.kind!=="Index"&&c.kind!=="Energy"&&c.kind!=="Crypto"?c.contract/100:c.contract;}
+function effLev(c){ // XM: min(account leverage, instrument leverage)
+  const acct=+S.settings.lev;
+  if(c.mode==="CFD")return Math.min(acct,c.lev||+S.settings.cfdLev);
+  return c.cap?Math.min(acct,c.cap):acct;}
+function levTxt(l){return "1:"+(+(+l).toFixed(2));}
+/* theoretical mid of any catalog symbol from USD legs */
+function crossMid(c,prev){
+  if(c.metal){const [m,f]=c.metal;return usd(m,prev)*f/usd(c.q,prev);}
+  if(c.mode==="F")return usd(c.base,prev)/usd(c.q,prev);
+  const x=q1(tickersFor(c.name)); return prev?prevClose(x):mid(x);
+}
+/* live quote for a position symbol: direct feed if possible, else cross */
+function liveQuote(sym){
+  const c=CAT[sym]; const x=q1(tickersFor(sym));
+  if(x)return {bid:x.bid||x.close,ask:x.ask||x.close,mid:mid(x),t:x.t,mode:x.mode,direct:true};
+  const m=c?crossMid(c):NaN; return {bid:m,ask:m,mid:m,t:"cross via USD rates",mode:"derived",direct:false};
+}
+/* XM formulas */
+function pipValueUSD(c,lots,pip,prev){return pip*contract(c)*lots*usd(c.q,prev);}
+function marginUSD(c,lots,openPrice){
+  const amt=lots*contract(c), lev=effLev(c);
+  if(c.mode==="F"){ // XM: amount × base→USD ÷ leverage (MT4 uses the open price when the quote is USD)
+    const b= c.base==="USD"?1 : (c.q==="USD"&&openPrice? openPrice : usd(c.base));
+    return amt*b/lev;}
+  const px=openPrice||crossMid(c); return amt*px*usd(c.q)/lev; // CFD with leverage
+}
+function swapPerLotUSD(c,dir){ // XM: point × swapPts × contract ÷ (USD→profit ccy)
+  const pts=dir==="Long"?c.swL:c.swS; if(pts==null)return null;
+  return c.point*pts*contract(c)*usd(c.q);
+}
+
+/* ---------- helpers ---------- */
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));
+function f(n,d=2){return (n==null||!isFinite(n))?"–":n.toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d});}
+function sg(n,d=2){return (n==null||!isFinite(n))?"–":(n>0?"+":"")+f(n,d);}
+function cls(n){return !isFinite(n)||n===0?"":(n>0?"pos":"neg");}
+function pd(c){return c?c.digits:5;}
+
+/* ---------- position maths (mirrors the Excel trading-record blocks) ---------- */
+const LEG_ROWS=10;   // entry rows shown on every position card (like the Excel blocks)
+function legOk(l){return (+l.lots>0)&&(+l.price>0);}
+function placeLeg(g,leg){const i=g.legs.findIndex(l=>(l.lots==null||l.lots===""||+l.lots===0)&&!l.ticket);if(i>=0)g.legs[i]=leg;else g.legs.push(leg);}
+function calc(g){
+  const c=CAT[g.sym]; if(!c)return null;
+  const legs=g.legs.filter(legOk);   // blank or half-filled rows are ignored
+  const lots=legs.reduce((a,l)=>a+(+l.lots),0);
+  const avg=lots?legs.reduce((a,l)=>a+(+l.lots)*(+l.price),0)/lots:NaN;
+  const sgn=g.dir==="Long"?1:-1, pip=c.posPip;
+  const lq=liveQuote(g.sym); const close=g.dir==="Long"?lq.bid:lq.ask;
+  const ppp=pipValueUSD(c,lots,pip);                    // $/pip for whole position
+  const floatPips=(close-avg)*sgn/pip;
+  const floatUSD=(close-avg)*sgn*contract(c)*lots*usd(c.q);
+  const accSwap=g.legs.reduce((a,l)=>a+(+l.swap||0),0);
+  const tp=+g.tp||null, sl=+g.sl||null;
+  const tpPips=tp?(tp-avg)*sgn/pip:null, slPips=sl?(sl-avg)*sgn/pip:null;
+  const tpUSD=tp!=null?tpPips*ppp:null, slUSD=sl!=null?slPips*ppp:null;
+  const rr=(tpPips!=null&&slPips)?Math.abs(tpPips/slPips):null;
+  const swXM=swapPerLotUSD(c,g.dir); const swLot=(g.swapOv!=null&&g.swapOv!=="")?+g.swapOv:swXM;
+  const swDay=swLot!=null?swLot*lots:null; const swTot=swDay!=null?swDay*(+g.days||0):null;
+  const marg=legs.reduce((a,l)=>a+marginUSD(c,+l.lots,+l.price),0);
+  const toTP=tp?(tp-close)*sgn/pip:null, toSL=sl?(close-sl)*sgn/pip:null;
+  return {c,lots,avg,sgn,pip,lq,close,ppp,floatPips,floatUSD,accSwap,tp,sl,tpPips,slPips,tpUSD,slUSD,rr,swXM,swLot,swDay,swTot,marg,toTP,toSL,
+    estPL:tpUSD!=null?tpUSD+(swTot||0):null};
+}
+
+/* ---------- rendering: positions ---------- */
+function pipLabel(c){return c.kind==="FX"?"pip "+c.posPip:"point "+f(c.posPip,0);}
+function buildCards(){
+  const box=$("#cards");
+  if(!S.groups.length){box.innerHTML='<div class="empty">No open positions. Import your MT4 statement or add a position.</div>';return;}
+  box.innerHTML=S.groups.map(g=>{
+    const c=CAT[g.sym]; const d=pd(c);
+    const n=Math.max(LEG_ROWS,g.legs.length);
+    const legs=Array.from({length:n},(_,i)=>{const l=g.legs[i]||{};const v=x=>x==null||x===""?"":x;
+      return `<tr><td><input type="number" step="0.01" min="0" data-g="${g.id}" data-leg="${i}" data-f="lots" value="${v(l.lots)}"></td>
+      <td><input type="number" step="any" data-g="${g.id}" data-leg="${i}" data-f="price" value="${v(l.price)}"></td>
+      <td data-k="w${i}"></td><td class="mut tk">${l.ticket?"#"+esc(l.ticket):""}</td>
+      <td>${g.legs[i]?`<button class="btn small danger" data-del-leg="${i}" data-g="${g.id}" title="clear this row">×</button>`:""}</td></tr>`;}).join("");
+    return `<div class="card" data-card="${g.id}">
+      <h3>${esc(g.sym)} <span class="tag ${g.dir.toLowerCase()}">${g.dir}</span> <span class="tag" data-k="lots"></span>
+        <span class="px" data-k="px"></span></h3>
+      <div class="src" data-k="src"></div>
+      <table class="legs"><thead><tr><th>Lot size</th><th>Price</th><th>Weight</th><th></th><th></th></tr></thead><tbody>${legs}</tbody></table>
+      <div class="grid">
+        <div class="cell"><div class="l">Avg. price</div><div class="v" data-k="avg"></div></div>
+        <div class="cell"><div class="l">Floating ${c&&c.kind==="FX"?"pips":"points"}</div><div class="v" data-k="fp"></div></div>
+        <div class="cell"><div class="l">Floating P/L $</div><div class="v" data-k="fu"></div></div>
+        <div class="cell"><div class="l">$ / ${c&&c.kind==="FX"?"pip":"point"} (live)</div><div class="v" data-k="ppp"></div></div>
+        <div class="cell"><div class="l">Margin used $</div><div class="v" data-k="mg"></div></div>
+        <div class="cell"><div class="l">Floating P/L ฿</div><div class="v" data-k="fthb"></div></div>
+        <div class="cell tp"><div class="l">Target price</div><input type="number" step="any" data-g="${g.id}" data-f="tp" value="${g.tp??""}"></div>
+        <div class="cell tp"><div class="l">${c&&c.kind==="FX"?"Pips":"Points"} to target</div><div class="v" data-k="tpp"></div></div>
+        <div class="cell tp"><div class="l">$ Profit · ฿</div><div class="v" data-k="tpu"></div></div>
+        <div class="cell sl"><div class="l">SL price</div><input type="number" step="any" data-g="${g.id}" data-f="sl" value="${g.sl??""}"></div>
+        <div class="cell sl"><div class="l">${c&&c.kind==="FX"?"Pips":"Points"} to SL</div><div class="v" data-k="slp"></div></div>
+        <div class="cell sl"><div class="l">$ Loss · ฿</div><div class="v" data-k="slu"></div></div>
+        <div class="cell"><div class="l">Risk : reward</div><div class="v" data-k="rr"></div></div>
+        <div class="cell"><div class="l">Swap / day / lot $</div><input type="number" step="any" data-g="${g.id}" data-f="swapOv" placeholder="" value="${g.swapOv??""}"></div>
+        <div class="cell"><div class="l">Assume holding (days)</div><input type="number" step="1" min="0" data-g="${g.id}" data-f="days" value="${g.days??20}"></div>
+        <div class="cell"><div class="l">Swap / day $</div><div class="v" data-k="swd"></div></div>
+        <div class="cell"><div class="l">Total swap $</div><div class="v" data-k="swt"></div></div>
+        <div class="cell"><div class="l">Estimated P/L $ at TP</div><div class="v" data-k="est"></div></div>
+      </div>
+      <div class="bar" data-k="bar"></div>
+      <div class="foot"><span class="note" data-k="note"></span>
+        <span><button class="btn small" data-add-leg="${g.id}">+ leg</button> <button class="btn small danger" data-del-g="${g.id}">Remove position</button></span></div>
+    </div>`;}).join("");
+}
+function setK(card,k,html,cl){const e=card.querySelector(`[data-k="${k}"]`);if(e){e.innerHTML=html;if(cl!==undefined)e.className="v "+cl;}}
+function updateCards(){
+  const thb=thbRate(); let T={fl:0,mg:0,tp:0,sl:0,swd:0,acc:0,est:0,n:0,nsl:0,ntp:0};
+  const rows=[];
+  for(const g of S.groups){
+    const card=document.querySelector(`[data-card="${g.id}"]`); const r=calc(g); if(!card||!r)continue;
+    const d=pd(r.c);
+    setK(card,"lots",f(r.lots,2)+" lots");
+    setK(card,"px",f(r.close,d));
+    const fresh=r.lq.mode&&/delayed/.test(r.lq.mode)?' · <span class="warn">delayed '+(r.lq.mode.match(/\d+/)?(+r.lq.mode.match(/\d+/)[0]/60)+" min":"")+'</span>':"";
+    setK(card,"src",`${g.dir==="Long"?"bid":"ask"} · ${esc(r.lq.t)}${fresh} · ${pipLabel(r.c)} · contract ${f(contract(r.c),0)} ${r.c.q}`);
+    for(let i=0;i<Math.max(LEG_ROWS,g.legs.length);i++){const l=g.legs[i];
+      setK(card,"w"+i,l&&legOk(l)&&r.lots?f(+l.lots/r.lots*100,1)+"%":"");}
+    setK(card,"avg",f(r.avg,d+1));
+    setK(card,"fp",sg(r.floatPips,1),cls(r.floatPips));
+    setK(card,"fu",sg(r.floatUSD+r.accSwap,2),cls(r.floatUSD+r.accSwap));
+    setK(card,"fthb",sg((r.floatUSD+r.accSwap)*thb,0),cls(r.floatUSD));
+    setK(card,"ppp",f(r.ppp,2));
+    setK(card,"mg",f(r.marg,2)+` <span class="mut" style="font-weight:400">${levTxt(effLev(r.c))}</span>`);
+    setK(card,"tpp",r.tpPips!=null?sg(r.tpPips,1)+` <span class="mut" style="font-weight:400">(${sg(r.toTP,1)} away)</span>`:"–");
+    setK(card,"tpu",r.tpUSD!=null?`<span class="${cls(r.tpUSD)}">${sg(r.tpUSD,0)}</span> · ${sg(r.tpUSD*thb,0)}`:"–");
+    setK(card,"slp",r.slPips!=null?sg(r.slPips,1)+` <span class="mut" style="font-weight:400">(${sg(r.toSL,1)} away)</span>`:"–");
+    setK(card,"slu",r.slUSD!=null?`<span class="${cls(r.slUSD)}">${sg(r.slUSD,0)}</span> · ${sg(r.slUSD*thb,0)}`:"no SL");
+    setK(card,"rr",r.rr!=null?"1 : "+f(r.rr,2):"–");
+    const sw=card.querySelector('[data-f="swapOv"]'); if(sw) sw.placeholder=r.swXM!=null?f(r.swXM,2)+" (XM)":"enter";
+    setK(card,"swd",r.swDay!=null?sg(r.swDay,2):"–",cls(r.swDay));
+    setK(card,"swt",r.swTot!=null?sg(r.swTot,2):"–",cls(r.swTot));
+    setK(card,"est",r.estPL!=null?sg(r.estPL,0):"–",cls(r.estPL));
+    setK(card,"note",r.accSwap?`Accrued swap from statement: ${sg(r.accSwap,2)} $ (included in floating P/L).`:"");
+    drawBar(card.querySelector('[data-k="bar"]'),r,d);
+    T.fl+=r.floatUSD+r.accSwap; T.mg+=r.marg; if(r.tpUSD!=null){T.tp+=r.tpUSD;T.ntp++;} if(r.slUSD!=null){T.sl+=r.slUSD;T.nsl++;} if(r.swDay!=null)T.swd+=r.swDay; if(r.estPL!=null)T.est+=r.estPL;
+    rows.push({g,r,d});
+  }
+  renderSummary(rows,T); renderAccount(T);
+}
+function drawBar(el,r,d){
+  if(!el)return;
+  const pts=[r.avg,r.close]; if(r.tp)pts.push(r.tp); if(r.sl)pts.push(r.sl);
+  if(!pts.every(isFinite)){el.innerHTML="";return;}
+  let lo=Math.min(...pts),hi=Math.max(...pts); const pad=(hi-lo)*0.06||r.avg*0.001; lo-=pad;hi+=pad;
+  const L=v=>((v-lo)/(hi-lo)*100);
+  // orient so that the stop side is on the left
+  const flip=r.sgn<0; const P=v=>flip?100-L(v):L(v);
+  let h=`<div class="avg" style="left:${P(r.avg)}%"></div><div class="lab" style="left:${P(r.avg)}%">avg ${f(r.avg,d)}</div>`;
+  if(r.tp)h+=`<div class="lab pos" style="left:${Math.min(97,P(r.tp))}%">TP ${f(r.tp,d)}</div>`;
+  if(r.sl)h+=`<div class="lab neg" style="left:${Math.max(3,P(r.sl))}%">SL ${f(r.sl,d)}</div>`;
+  h+=`<div class="mk" style="left:${P(r.close)}%" title="now ${f(r.close,d)}"></div>`;
+  el.innerHTML=h; el.style.marginBottom="18px";
+}
+function renderSummary(rows,T){
+  const w=$("#sumWrap"); if(!rows.length){w.innerHTML="";return;}
+  const thb=thbRate();
+  w.innerHTML=`<table><thead><tr><th>Symbol</th><th>Dir</th><th>Lots</th><th>Avg</th><th>Now</th><th>Pips/pts</th><th>Floating $</th><th>$/pip</th><th>Margin $</th><th>Target</th><th>$ at TP</th><th>SL</th><th>$ at SL</th><th>R:R</th><th>Swap/day $</th><th>Est. P/L $</th></tr></thead><tbody>`+
+  rows.map(({g,r,d})=>`<tr><td><b>${esc(g.sym)}</b></td><td class="${g.dir==="Long"?"pos":"neg"}">${g.dir}</td><td>${f(r.lots,2)}</td><td>${f(r.avg,d)}</td><td>${f(r.close,d)}</td>
+   <td class="${cls(r.floatPips)}">${sg(r.floatPips,1)}</td><td class="${cls(r.floatUSD+r.accSwap)}">${sg(r.floatUSD+r.accSwap,2)}</td><td>${f(r.ppp,2)}</td><td>${f(r.marg,2)}</td>
+   <td>${r.tp?f(r.tp,d):"–"}</td><td class="${cls(r.tpUSD)}">${r.tpUSD!=null?sg(r.tpUSD,0):"–"}</td><td>${r.sl?f(r.sl,d):"–"}</td><td class="${cls(r.slUSD)}">${r.slUSD!=null?sg(r.slUSD,0):"–"}</td>
+   <td>${r.rr!=null?f(r.rr,2):"–"}</td><td class="${cls(r.swDay)}">${r.swDay!=null?sg(r.swDay,2):"–"}</td><td class="${cls(r.estPL)}">${r.estPL!=null?sg(r.estPL,0):"–"}</td></tr>`).join("")+
+  `<tr class="tot"><td>Total</td><td></td><td></td><td></td><td></td><td></td><td class="${cls(T.fl)}">${sg(T.fl,2)}</td><td></td><td>${f(T.mg,2)}</td><td></td>${T.ntp?`<td class="${cls(T.tp)}">${sg(T.tp,0)}<div class="mut" style="font-weight:400">฿${f(T.tp*thb,0)}</div></td>`:"<td>–</td>"}<td></td>${T.nsl?`<td class="${cls(T.sl)}">${sg(T.sl,0)}<div class="mut" style="font-weight:400">฿${f(T.sl*thb,0)}</div></td>`:'<td class="warn">no SL</td>'}<td></td><td class="${cls(T.swd)}">${sg(T.swd,2)}</td><td class="${cls(T.est)}">${sg(T.est,0)}</td></tr></tbody></table>`;
+}
+function renderAccount(T){
+  const a=S.account, eq=(+a.balance||0)+(+a.credit||0)+T.fl, free=eq-T.mg, ml=T.mg?eq/T.mg*100:null, thb=thbRate();
+  const box=$("#acct");
+  if(!box.dataset.built){
+    box.innerHTML=`<div class="kpi"><div class="l">Balance $</div><input type="number" step="0.01" id="aBal"></div>
+      <div class="kpi"><div class="l">Credit (bonus) $</div><input type="number" step="0.01" id="aCred"></div>
+      <div class="kpi"><div class="l">Floating P/L $</div><div class="v" id="kFl"></div></div>
+      <div class="kpi"><div class="l">Equity $</div><div class="v" id="kEq"></div></div>
+      <div class="kpi"><div class="l">Margin $</div><div class="v" id="kMg"></div></div>
+      <div class="kpi"><div class="l">Free margin $</div><div class="v" id="kFree"></div></div>
+      <div class="kpi"><div class="l">Margin level</div><div class="v" id="kMl"></div></div>
+      <div class="kpi"><div class="l">USD→THB</div><div class="v" id="kThb"></div></div>`;
+    box.dataset.built=1;
+    $("#aBal").addEventListener("input",e=>{S.account.balance=+e.target.value;save();updateCards();});
+    $("#aCred").addEventListener("input",e=>{S.account.credit=+e.target.value;save();updateCards();});
+  }
+  if(document.activeElement!==$("#aBal"))$("#aBal").value=a.balance;
+  if(document.activeElement!==$("#aCred"))$("#aCred").value=a.credit;
+  $("#kFl").innerHTML=`<span class="${cls(T.fl)}">${sg(T.fl,2)}</span>`;
+  $("#kEq").textContent=f(eq,2);
+  $("#kMg").textContent=f(T.mg,2);
+  $("#kFree").innerHTML=`<span class="${free<0?"neg":""}">${f(free,2)}</span>`;
+  $("#kMl").innerHTML=ml==null?"–":`<span class="${ml<100?"neg":ml<300?"warn":"pos"}">${f(ml,0)}%</span>`;
+  $("#kThb").textContent=f(thb,3)+(S.settings.thbMode==="fixed"?" fixed":"");
+}
+
+/* ---------- rendering: FX pip table ---------- */
+let fxSort={k:"name",dir:1};
+function myCcys(){const s=new Set();for(const g of S.groups){const c=CAT[g.sym];if(c){if(c.base)s.add(c.base);s.add(c.q);}}return s;}
+function renderFx(){
+  const lots=+$("#fxLots").value||1, flt=$("#fxFilter").value.trim().toUpperCase(), mine=$("#fxMine").checked, mc=myCcys();
+  const held=new Set(S.groups.map(g=>g.sym));
+  let rows=Object.values(CAT).filter(c=>c.kind==="FX"||c.kind==="Metal").map(c=>{
+    const px=crossMid(c), pv=pipValueUSD(c,lots,c.xmPip), pvPrev=pipValueUSD(c,lots,c.xmPip,true);
+    if(isFinite(pv)&&SESSION0[c.name]==null)SESSION0[c.name]=pv/lots;
+    const s0=SESSION0[c.name]!=null?SESSION0[c.name]*lots:NaN;
+    const prevPx=crossMid(c,true);
+    return {c,name:c.name,px,chg:(px/prevPx-1)*100,pv,pvPrev,dPrev:(pv/pvPrev-1)*100,dSes:(pv/s0-1)*100,
+      mg:marginUSD(c,lots),lev:effLev(c),swL:swapPerLotUSD(c,"Long")*lots,swS:swapPerLotUSD(c,"Short")*lots};
+  });
+  if(flt)rows=rows.filter(r=>flt.split(/[ ,]+/).every(t=>r.name.includes(t)));
+  if(mine)rows=rows.filter(r=>[...mc].some(x=>r.name.includes(x)));
+  const k=fxSort.k; rows.sort((a,b)=>{const x=a[k],y=b[k];return (typeof x==="string"?x.localeCompare(y):((isFinite(x)?x:-1e18)-(isFinite(y)?y:-1e18)))*fxSort.dir;});
+  const H=(k,l)=>`<th class="sort" data-sort="${k}">${l}${fxSort.k===k?(fxSort.dir>0?" ▲":" ▼"):""}</th>`;
+  $("#fxWrap").innerHTML=`<table><thead><tr>${H("name","Symbol")}<th>Profit ccy</th>${H("px","Price")}${H("chg","Day Δ%")}<th>Pip</th>${H("pv","Pip value $")}${H("pvPrev","at prev close $")}${H("dPrev","Δ prev close")}${H("dSes","Δ session")}${H("mg","Margin $")}<th>Lev</th>${H("swL","Swap long $/day")}${H("swS","Swap short $/day")}</tr></thead><tbody>`+
+   rows.map(r=>`<tr class="${held.has(r.name)?"hl":""}"><td><b>${r.name}</b> <span class="mut">${r.c.kind==="Metal"?"metal":""}</span></td><td>${r.c.q}</td><td>${f(r.px,r.c.digits)}</td><td class="${cls(r.chg)}">${sg(r.chg,2)}%</td><td class="mut">${+r.c.xmPip.toFixed(6)}</td>
+    <td><b>${f(r.pv,2)}</b></td><td>${f(r.pvPrev,2)}</td><td class="${cls(r.dPrev)}">${Math.abs(r.dPrev)<0.0005?"0.00%":sg(r.dPrev,2)+"%"}</td><td class="${cls(r.dSes)}">${isFinite(r.dSes)?(Math.abs(r.dSes)<0.0005?"0.00%":sg(r.dSes,3)+"%"):"–"}</td>
+    <td>${f(r.mg,2)}</td><td class="mut">${levTxt(r.lev)}</td><td class="${cls(r.swL)}">${sg(r.swL,2)}</td><td class="${cls(r.swS)}">${sg(r.swS,2)}</td></tr>`).join("")+`</tbody></table>`;
+}
+/* ---------- rendering: CFD table ---------- */
+function renderCfd(){
+  const lots=+$("#cfdLots").value||1;
+  $("#cfdWrap").innerHTML=`<table><thead><tr><th>Symbol</th><th>Type</th><th>Feed</th><th>Price</th><th>Day Δ%</th><th>Value / point (1 lot)</th><th>$ / point (${f(lots,2)} lot)</th><th>XM max lev.</th><th>Margin $ (${f(lots,2)} lot)</th></tr></thead><tbody>`+
+   CFD.map(x=>{const c=CAT[x.name];const q=q1(tickersFor(x.name));const px=mid(q);const chg=q?q.chg:NaN;
+     const dl=q&&/delayed/.test(q.mode)?` <span class="warn">delayed</span>`:"";
+     return `<tr><td><b>${x.name}</b> <span class="mut">${x.desc}</span></td><td>${x.kind}</td><td class="mut">${q?esc(q.t):"no feed"}${dl}</td><td>${f(px,2)}</td><td class="${cls(chg)}">${sg(chg,2)}%</td>
+      <td>${f(x.ppl,0)} ${x.q}</td><td><b>${f(pipValueUSD(c,lots,1),2)}</b></td><td class="mut">${levTxt(effLev(c))}</td><td><b>${f(marginUSD(c,lots),2)}</b></td></tr>`;}).join("")+`</tbody></table>`;
+}
+function renderAll(){updateCards();if($("#tab-fx").classList.contains("on"))renderFx();if($("#tab-cfd").classList.contains("on"))renderCfd();}
+
+/* ---------- MT4 statement import ---------- */
+function num(s){s=String(s||"").replace(/[\s ]/g,"");return s===""?NaN:+s;}
+function parseStatement(text){
+  const doc=new DOMParser().parseFromString(text,"text/html");
+  const trs=[...doc.querySelectorAll("tr")]; let inOpen=false; const legs=[]; const acc={};
+  for(const tr of trs){
+    const cells=[...tr.querySelectorAll("td")].map(td=>td.textContent.replace(/ /g," ").trim());
+    const line=cells.join(" ");
+    if(/Open Trades:/.test(line)){inOpen=true;continue;}
+    if(/Working Orders:|Summary:/.test(line))inOpen=false;
+    if(inOpen&&cells.length>=13&&/^(buy|sell)$/.test(cells[2])){
+      legs.push({ticket:cells[0],time:cells[1],dir:cells[2]==="buy"?"Long":"Short",lots:num(cells[3]),sym:cells[4],price:num(cells[5]),sl:num(cells[6]),tp:num(cells[7]),
+        swap:num(cells[cells.length-2]),profit:num(cells[cells.length-1])});
+    }
+    for(let i=0;i<cells.length-1;i++){
+      const k=cells[i];
+      if(/^Balance:$/.test(k))acc.balance=num(cells[i+1]);
+      if(/^Credit Facility:$/.test(k))acc.credit=num(cells[i+1]);
+      if(/^Equity:$/.test(k))acc.equity=num(cells[i+1]);
+      if(/^Margin:$/.test(k))acc.margin=num(cells[i+1]);
+    }
+  }
+  const m=text.match(/(\d{4} \w+ \d{1,2}, \d{2}:\d{2})/); acc.asOf=m?m[1]:"";
+  const acct=text.match(/Account:\s*(?:<[^>]*>\s*)*(\d+)/); acc.no=acct?acct[1]:"";
+  return {legs,acc};
+}
+/* Shared by statement + screenshot import. legs: [{sym(canonical),dir,lots,price,ticket?,swap?,tp?,sl?}]
+   replace=true: positions become exactly these legs; TP / SL / holding days / swap override are kept per symbol+direction. */
+function applyLegs(newLegs,replace){
+  const old={}; S.groups.forEach(g=>old[g.sym+"|"+g.dir]=g);
+  const groups={}; if(!replace) S.groups.forEach(g=>groups[g.sym+"|"+g.dir]=g);
+  for(const l of newLegs){
+    const key=l.sym+"|"+l.dir;
+    if(!groups[key]){const o=old[key]||{};groups[key]={id:"g"+Math.random().toString(36).slice(2,8),sym:l.sym,dir:l.dir,tp:o.tp??null,sl:o.sl??null,days:o.days??20,swapOv:o.swapOv??null,legs:[]};}
+    const g=groups[key]; g._tp=g._tp||{}; g._sl=g._sl||{};
+    placeLeg(g,{lots:l.lots,price:l.price,ticket:l.ticket,swap:isFinite(l.swap)?l.swap:0});
+    if(l.tp>0)g._tp[l.tp]=(g._tp[l.tp]||0)+l.lots; if(l.sl>0)g._sl[l.sl]=(g._sl[l.sl]||0)+l.lots;
+  }
+  const top=o=>{const e=Object.entries(o||{}).sort((a,b)=>b[1]-a[1])[0];return e?+e[0]:null;};
+  S.groups=Object.values(groups).map(g=>{const t=top(g._tp),s=top(g._sl);if(t!=null)g.tp=t;if(s!=null)g.sl=s;delete g._tp;delete g._sl;return g;});
+  return S.groups.length;
+}
+function importStatement(text){
+  const {legs,acc}=parseStatement(text);
+  const unknown=new Set(); const ok=[];
+  for(const l of legs){const sym=canon(l.sym); if(!sym){unknown.add(l.sym);continue;} ok.push(Object.assign({},l,{sym}));}
+  const n=applyLegs(ok,true);
+  if(isFinite(acc.balance))S.account.balance=acc.balance; if(isFinite(acc.credit))S.account.credit=acc.credit; S.account.asOf=acc.asOf;
+  save(); buildCards(); fetchQuotes();
+  $("#stmtInfo").innerHTML=`Imported ${legs.length} open trade(s) into ${n} position(s) from statement ${esc(acc.no)} (${esc(acc.asOf)}).`+
+    (isFinite(acc.margin)?` MT4 margin then: $${f(acc.margin,2)}, equity $${f(acc.equity,2)}.`:"")+(unknown.size?` <span class="warn">Skipped unknown symbols: ${esc([...unknown].join(", "))}</span>`:"");
+}
+
+/* ---------- screenshot import (text read on this computer with Tesseract.js; the image is never uploaded) ---------- */
+const TESS_URL="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
+let tessWorker=null;
+function loadScript(src){return new Promise((res,rej)=>{if(window.Tesseract)return res();const s=document.createElement("script");s.src=src;s.onload=res;s.onerror=()=>rej(new Error("could not download the text reader (needs internet the first time)"));document.head.appendChild(s);});}
+async function ocrImage(blob,status){
+  status("Loading the text reader…");
+  await loadScript(TESS_URL);
+  if(!tessWorker) tessWorker=await Tesseract.createWorker("eng");
+  status("Reading the screenshot…");
+  const img=await createImageBitmap(blob);
+  const scale=img.width<1400?2:1, cv=document.createElement("canvas"); cv.width=img.width*scale; cv.height=img.height*scale;
+  const cx=cv.getContext("2d"); cx.imageSmoothingQuality="high"; cx.drawImage(img,0,0,cv.width,cv.height);
+  const d=cx.getImageData(0,0,cv.width,cv.height),p=d.data; let sum=0;
+  for(let i=0;i<p.length;i+=4)sum+=0.299*p[i]+0.587*p[i+1]+0.114*p[i+2];
+  const dark=sum/(p.length/4)<128;   // dark-theme screenshots: invert so text is black on white
+  for(let i=0;i<p.length;i+=4){const l=0.299*p[i]+0.587*p[i+1]+0.114*p[i+2];const ink=dark?l>95:l<170;p[i]=p[i+1]=p[i+2]=ink?0:255;}
+  cx.putImageData(d,0,0);
+  const {data}=await tessWorker.recognize(cv);
+  return data.text;
+}
+/* Understands the MetaTrader mobile "Trade" screen (SYMBOL, buy 0.50 / open → current / profit) and
+   the MT4/MT5 desktop Trade tab rows (ticket time buy 0.50 symbol open S/L T/P price … profit). */
+function parseShot(text){
+  const lines=text.split(/\n/).map(s=>s.replace(/[|]/g," ").trim()).filter(Boolean);
+  const acc={}, legs=[]; let cur=null;
+  const norm=s=>s.replace(/(\d),(\d{3,})(?!\d)/g,"$1.$2");                 // 1,09776 → 1.09776
+  const toks=s=>(norm(s).match(/[-−–]?\d+(?:\.\d+)?/g)||[]).map(x=>x.replace(/[−–]/,"-"));
+  const nums=s=>toks(s).map(Number);
+  const money=s=>toks(s).filter(x=>/^-?\d+\.\d{2}$/.test(x)).map(Number);   // profit always shows 2 decimals
+  const amt=s=>{const m=s.match(/[-−–]?\d+(?:[ , ]\d{3})*\.\d{1,2}/g);return m?+m[m.length-1].replace(/[ , ]/g,"").replace(/[−–]/,"-"):NaN;};
+  const SYM="([A-Za-z][A-Za-z0-9.#\\-]{2,15})";
+  for(const ln of lines){
+    const lo=ln.toLowerCase();
+    if(/^free\s*margin/.test(lo)){acc.free=amt(ln);continue;}
+    if(/^margin\s*level/.test(lo)){acc.level=amt(ln);continue;}
+    if(/^margin\b/.test(lo)){acc.margin=amt(ln);continue;}
+    if(/^balance/.test(lo)){acc.balance=amt(ln);continue;}
+    if(/^credit/.test(lo)){acc.credit=amt(ln);continue;}
+    if(/^equity/.test(lo)){acc.equity=amt(ln);continue;}
+    let m=ln.match(new RegExp(SYM+"\\s*[,.;:]?\\s*(buy|sell)\\b\\s*(limit|stop)?\\s*(\\d+(?:[.,]\\d+)?)","i"));
+    if(m&&!/^(buy|sell)$/i.test(m[1])){
+      if(m[3]){cur=null;continue;}                                            // pending orders are not positions
+      cur={raw:m[1],dir:/buy/i.test(m[2])?"Long":"Short",lots:+m[4].replace(",","."),extra:money(ln.slice(m.index+m[0].length)),seen:0};
+      legs.push(cur); continue;}
+    m=ln.match(new RegExp("\\b(buy|sell)\\s+(\\d+(?:\\.\\d+)?)\\s+"+SYM+"\\s+(.*)$","i"));   // desktop Trade tab row
+    if(m){const n=nums(m[4]); legs.push({raw:m[3],dir:/buy/i.test(m[1])?"Long":"Short",lots:+m[2],open:n[0],sl:n[1]||null,tp:n[2]||null,cur:n[3],profit:n.length>4?n[n.length-1]:null,extra:[]}); cur=null; continue;}
+    if(!cur)continue;
+    if(++cur.seen>3){cur=null;continue;}                                      // only the 1–3 lines right under a position belong to it
+    const n=nums(ln);
+    if(cur.open==null&&n.length>=2){cur.open=n[0];cur.cur=n[1];
+      const t=toks(ln), twoDp=x=>/^-?\d+\.\d{2}$/.test(x);                    // index prices also have 2 decimals: skip them
+      cur.extra.push(...money(ln).slice((twoDp(t[0])?1:0)+(twoDp(t[1])?1:0)));}
+    else cur.extra.push(...money(ln));
+  }
+  for(const l of legs){if(l.profit==null&&l.extra.length)l.profit=l.extra[0];delete l.extra;delete l.seen;l.sym=canon(l.raw);}
+  return {legs,acc};
+}
+/* digit check: does open → current × lots give the profit shown in the screenshot? */
+function shotCheck(l){
+  const msgs=[]; const c=CAT[l.sym];
+  if(!c)return {lvl:"bad",msgs:["unknown symbol – pick one"]};
+  if(!(l.lots>0))msgs.push("lots missing");
+  if(!(l.price>0))return {lvl:"bad",msgs:msgs.concat("open price missing")};
+  const live=liveQuote(l.sym).mid;
+  if(isFinite(live)&&Math.abs(l.price/live-1)>0.03)msgs.push(`open price is ${f(Math.abs(l.price/live-1)*100,1)}% from live ${f(live,c.digits)}`);
+  l.calc=null;
+  if(l.cur>0&&l.lots>0){
+    l.calc=(l.cur-l.price)*(l.dir==="Long"?1:-1)*contract(c)*l.lots*usd(c.q);
+    // the profit column is a hint only: its "7" is often read as "1" and a red minus can drop, so compare sizes, not signs
+    if(l.profit!=null&&isFinite(l.calc)&&Math.abs(Math.abs(l.calc)-Math.abs(l.profit))>Math.max(1.5,Math.abs(l.profit)*0.15))
+      msgs.push(`Is profit ${sg(l.calc,2)} on your screen? Yes → fine (read as ${sg(l.profit,2)}). No → fix open price / lots`);
+  }
+  return {lvl:msgs.length?"warn":"ok",msgs};
+}
+let SHOT=null;
+function shotStatus(msg){$("#shotBody").innerHTML=`<p class="note">${esc(msg)}</p>`;}
+async function handleShot(blob){
+  const dlg=$("#shotDlg"); if(!dlg.open)dlg.showModal();
+  try{
+    const text=await ocrImage(blob,shotStatus);
+    SHOT=parseShot(text); SHOT.text=text;
+    SHOT.legs.forEach(l=>{l.price=l.open;l.use=true;});
+    renderShot();
+  }catch(e){$("#shotBody").innerHTML=`<p class="neg">Could not read the screenshot: ${esc(e.message||e)}</p><div class="foot"><span></span><button class="btn" onclick="this.closest('dialog').close()">Close</button></div>`;}
+}
+function renderShot(){
+  const {legs,acc}=SHOT; const opts=Object.keys(CAT).sort().map(k=>`<option value="${k}">`).join("");
+  const rows=legs.map((l,i)=>{const ck=shotCheck(l);const d=CAT[l.sym]?CAT[l.sym].digits:5;
+    return `<tr data-i="${i}"><td><input type="checkbox" data-sf="use" ${l.use?"checked":""}></td>
+      <td><input list="shotSyms" data-sf="sym" value="${esc(l.sym||l.raw)}" style="min-width:96px"></td>
+      <td><select data-sf="dir"><option ${l.dir==="Long"?"selected":""}>Long</option><option ${l.dir==="Short"?"selected":""}>Short</option></select></td>
+      <td><input type="number" step="0.01" data-sf="lots" value="${l.lots??""}"></td>
+      <td><input type="number" step="any" data-sf="price" value="${l.price??""}" style="min-width:90px"></td>
+      <td class="mut">${l.cur!=null?f(l.cur,d):"–"}</td><td class="${cls(l.calc)}" data-calc>${l.calc!=null&&isFinite(l.calc)?sg(l.calc,2):"–"}</td><td class="mut">${l.profit!=null?sg(l.profit,2):"–"}</td>
+      <td class="chk ${ck.lvl==="ok"?"pos":ck.lvl==="warn"?"warn":"neg"}" data-ck>${ck.lvl==="ok"?"✓ digits check out":esc(ck.msgs.join("; "))}</td></tr>`;}).join("");
+  const nm=legs.filter(l=>l.use).length;
+  const hasAcc=isFinite(acc.balance)||isFinite(acc.credit);
+  $("#shotBody").innerHTML=`<datalist id="shotSyms">${opts}</datalist>
+    ${legs.length?`<p class="note">Found ${legs.length} position(s). Check the numbers against your screenshot, fix any misread digit, then apply. TP / SL and holding days you already set are kept per symbol.</p>
+    <div class="tblwrap" style="max-height:52vh"><table><thead><tr><th></th><th>Symbol</th><th>Dir</th><th>Lots</th><th>Open price</th><th>Now</th><th>P/L from prices</th><th>Profit read</th><th style="text-align:left">Check</th></tr></thead><tbody>${rows}</tbody></table></div>`
+    :`<p class="warn">No positions found in this image. It works with the MetaTrader “Trade” screen (phone app or desktop Trade tab). Raw text read:</p><textarea readonly>${esc(SHOT.text)}</textarea>`}
+    <div class="acctrow">
+      <label><input type="checkbox" id="shotAcc" ${hasAcc?"checked":""}> update balance &amp; credit</label>
+      <label>Balance $ <input type="number" step="0.01" id="shotBal" value="${isFinite(acc.balance)?acc.balance:""}"></label>
+      <label>Credit $ <input type="number" step="0.01" id="shotCred" value="${isFinite(acc.credit)?acc.credit:""}"></label>
+      ${isFinite(acc.margin)?`<span class="note">Screenshot margin $${f(acc.margin,2)} · equity $${f(acc.equity,2)}</span>`:""}
+    </div>
+    <div class="acctrow"><label><input type="radio" name="shotMode" value="replace" checked> Replace all my positions with these</label>
+      <label><input type="radio" name="shotMode" value="add"> Add to existing positions</label></div>
+    <div class="foot"><span class="note">Read on this computer – the image is not uploaded.</span>
+      <span><button class="btn" id="shotCancel">Cancel</button> <button class="btn primary" id="shotApply" ${legs.length?"":"disabled"}>Fill positions</button></span></div>`;
+  $("#shotCancel").onclick=()=>$("#shotDlg").close();
+  $("#shotApply").onclick=applyShot;
+}
+function applyShot(){
+  const use=SHOT.legs.filter(l=>l.use);
+  const bad=use.filter(l=>!CAT[l.sym]||!(l.lots>0)||!(l.price>0));
+  if(bad.length){alert("Fix or untick the rows marked in red first.");return;}
+  const replace=document.querySelector('input[name="shotMode"]:checked').value==="replace";
+  if(replace&&!confirm(`Replace your ${S.groups.length} current position(s) with ${use.length} trade(s) from the screenshot?`))return;
+  const n=applyLegs(use.map(l=>({sym:l.sym,dir:l.dir,lots:l.lots,price:l.price})),replace);
+  if($("#shotAcc")&&$("#shotAcc").checked){const b=$("#shotBal").value,c=$("#shotCred").value;if(b!=="")S.account.balance=+b;if(c!=="")S.account.credit=+c;}
+  S.account.asOf=new Date().toLocaleString()+" (screenshot)";
+  save(); buildCards(); fetchQuotes(); $("#shotDlg").close();
+  $("#stmtInfo").innerHTML=`Filled ${use.length} trade(s) into ${n} position(s) from a screenshot.`+(isFinite(SHOT.acc.margin)?` Screenshot margin was $${f(SHOT.acc.margin,2)} – compare with the Margin box above.`:"");
+}
+$("#shotBody").addEventListener("input",e=>{
+  const t=e.target, tr=t.closest("tr[data-i]"); if(!tr||!t.dataset.sf)return;
+  const l=SHOT.legs[+tr.dataset.i], k=t.dataset.sf;
+  if(k==="use")l.use=t.checked; else if(k==="sym")l.sym=canon(t.value)||t.value; else if(k==="dir")l.dir=t.value; else l[k]=t.value===""?null:+t.value;
+  const ck=shotCheck(l), cell=tr.querySelector("[data-ck]"), pc=tr.querySelector("[data-calc]");
+  if(pc){pc.textContent=l.calc!=null&&isFinite(l.calc)?sg(l.calc,2):"–";pc.className=cls(l.calc);}
+  cell.className="chk "+(ck.lvl==="ok"?"pos":ck.lvl==="warn"?"warn":"neg"); cell.textContent=ck.lvl==="ok"?"✓ digits check out":ck.msgs.join("; ");
+});
+$("#shotFile").addEventListener("change",e=>{const fl=e.target.files[0];if(fl)handleShot(fl);e.target.value="";});
+document.addEventListener("paste",e=>{
+  const it=[...(e.clipboardData?.items||[])].find(i=>i.type.startsWith("image/")); if(!it)return;
+  e.preventDefault(); handleShot(it.getAsFile());
+});
+document.addEventListener("dragover",e=>{if([...e.dataTransfer.items].some(i=>i.type.startsWith("image/"))){e.preventDefault();document.body.classList.add("dragging");}});
+document.addEventListener("dragleave",e=>{if(!e.relatedTarget)document.body.classList.remove("dragging");});
+document.addEventListener("drop",e=>{document.body.classList.remove("dragging");const fl=[...e.dataTransfer.files].find(x=>x.type.startsWith("image/"));if(fl){e.preventDefault();handleShot(fl);}});
+
+/* ---------- events ---------- */
+document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>{
+  document.querySelectorAll("nav button").forEach(x=>x.classList.toggle("on",x===b));
+  document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("on",t.id==="tab-"+b.dataset.tab));
+  try{localStorage.setItem(LS+".tab",b.dataset.tab);}catch(e){}
+  renderAll();
+}));
+$("#cards").addEventListener("input",e=>{
+  const t=e.target, g=S.groups.find(x=>x.id===t.dataset.g); if(!g||!t.dataset.f)return;
+  const v=t.value===""?null:+t.value;
+  if(t.dataset.leg!=null){
+    const i=+t.dataset.leg; const wasNew=!g.legs[i];
+    while(g.legs.length<=i)g.legs.push({lots:null,price:null});
+    g.legs[i][t.dataset.f]=v;
+    if(wasNew){const card=t.closest("[data-card]"),btn=t.closest("tr").lastElementChild; if(card&&btn&&!btn.innerHTML)btn.innerHTML=`<button class="btn small danger" data-del-leg="${i}" data-g="${g.id}" title="clear this row">×</button>`;}
+  } else g[t.dataset.f]=v;
+  save(); updateCards();
+});
+$("#cards").addEventListener("click",e=>{
+  const t=e.target;
+  if(t.dataset.delLeg!=null){const g=S.groups.find(x=>x.id===t.dataset.g);g.legs.splice(+t.dataset.delLeg,1);}
+  else if(t.dataset.addLeg){const g=S.groups.find(x=>x.id===t.dataset.addLeg);const lq=liveQuote(g.sym);placeLeg(g,{lots:0.1,price:+(g.dir==="Long"?lq.ask:lq.bid).toFixed(pd(CAT[g.sym]))||0});}
+  else if(t.dataset.delG){if(!confirm("Remove this position from the monitor?"))return;S.groups=S.groups.filter(x=>x.id!==t.dataset.delG);}
+  else return;
+  save(); buildCards(); updateCards();
+});
+$("#fxWrap").addEventListener("click",e=>{const k=e.target.closest("th")?.dataset.sort;if(!k)return;fxSort=fxSort.k===k?{k,dir:-fxSort.dir}:{k,dir:k==="name"?1:-1};renderFx();});
+["#fxLots","#fxFilter","#fxMine"].forEach(s=>$(s).addEventListener("input",renderFx));
+$("#cfdLots").addEventListener("input",renderCfd);
+$("#refreshNow").addEventListener("click",fetchQuotes);
+$("#stmtFile").addEventListener("change",e=>{const fl=e.target.files[0];if(!fl)return;const rd=new FileReader();rd.onload=()=>importStatement(rd.result);rd.readAsText(fl);e.target.value="";});
+$("#addPos").addEventListener("click",()=>{$("#dlgForm").reset();$("#dlg").showModal();});
+$("#symList").innerHTML=Object.keys(CAT).sort().map(k=>`<option value="${k}">`).join("");
+$("#dlg").addEventListener("close",()=>{
+  if($("#dlg").returnValue!=="ok")return;
+  const sym=canon($("#dSym").value); if(!sym){alert("Unknown symbol: "+$("#dSym").value);return;}
+  const dir=$("#dDir").value, lots=+$("#dLots").value; let price=$("#dPrice").value===""?null:+$("#dPrice").value;
+  if(price==null){const lq=liveQuote(sym);price=+(dir==="Long"?lq.ask:lq.bid).toFixed(pd(CAT[sym]));}
+  let g=S.groups.find(x=>x.sym===sym&&x.dir===dir);
+  if(!g){g={id:"g"+Math.random().toString(36).slice(2,8),sym,dir,tp:null,sl:null,days:20,swapOv:null,legs:[]};S.groups.push(g);}
+  placeLeg(g,{lots,price}); if($("#dTp").value)g.tp=+$("#dTp").value; if($("#dSl").value)g.sl=+$("#dSl").value;
+  save(); buildCards(); fetchQuotes();
+});
+/* settings */
+$("#sLev").innerHTML=LEVERAGES.map(l=>`<option value="${l}">1:${l}</option>`).join("");
+function bindSetting(id,key,cb){const el=$(id);el.value=S.settings[key];el.addEventListener("input",()=>{S.settings[key]=el.type==="number"?+el.value:el.value;save();cb&&cb();renderAll();});}
+bindSetting("#sLev","lev"); bindSetting("#sCfdLev","cfdLev"); bindSetting("#sAcct","acct"); bindSetting("#sThbMode","thbMode"); bindSetting("#sThb","thb");
+bindSetting("#sRefresh","refresh",schedule); bindSetting("#sTheme","theme",applyTheme);
+bindSetting("#sAcctLabel","acctLabel",showAcctLabel);
+function showAcctLabel(){$("#acctName").textContent=S.settings.acctLabel||"";}
+showAcctLabel();
+$("#sTickers").value=S.settings.tickers||""; $("#sTickers").addEventListener("change",()=>{S.settings.tickers=$("#sTickers").value;save();fetchQuotes();});
+function applyTheme(){if(S.settings.theme)document.documentElement.dataset.theme=S.settings.theme;else delete document.documentElement.dataset.theme;}
+$("#exportBtn").addEventListener("click",()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(S,null,1)],{type:"application/json"}));a.download="xm_trade_monitor_"+new Date().toISOString().slice(0,10)+".json";a.click();});
+$("#importJson").addEventListener("change",e=>{const fl=e.target.files[0];if(!fl)return;const rd=new FileReader();rd.onload=()=>{try{const j=JSON.parse(rd.result);if(!j.groups)throw 0;S=Object.assign(structuredClone(SEED),j);save();location.reload();}catch(err){alert("Not a monitor backup file.");}};rd.readAsText(fl);});
+$("#resetBtn").addEventListener("click",()=>{if(confirm("Clear all positions?")){S.groups=[];save();buildCards();updateCards();}});
+
+/* ---------- start ---------- */
+applyTheme();
+try{const t=localStorage.getItem(LS+".tab");if(t)document.querySelector(`nav button[data-tab="${t}"]`)?.click();}catch(e){}
+if(S.account.asOf)$("#stmtInfo").textContent="Positions as of "+S.account.asOf+". Re-import the statement after trading.";
+buildCards(); updateCards(); fetchQuotes(); schedule();
+</script>
+</body>
+</html>
