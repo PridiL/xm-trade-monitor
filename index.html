@@ -115,7 +115,7 @@ dialog input,dialog select{width:100%}
   <div class="strip" id="acct"></div>
   <div class="toolbar">
     <button class="btn primary" id="addPos">+ Add position</button>
-    <label class="btn" title="Or press Ctrl+V with a screenshot copied, or drop an image on the page">Read screenshot (or Ctrl+V)<input type="file" id="shotFile" accept="image/*" hidden></label>
+    <label class="btn" title="Or press Ctrl+V with a screenshot copied, or drop an image on the page">Read screenshot (or Ctrl+V)<input type="file" id="shotFile" accept="image/*" multiple hidden></label>
     <label class="btn">Import MT4 statement (.htm)<input type="file" id="stmtFile" accept=".htm,.html" hidden></label>
     <span class="note" id="stmtInfo"></span>
     <span class="sp"></span>
@@ -660,7 +660,7 @@ function shotCheck(l){
   const msgs=[]; const c=CAT[l.sym];
   if(!c)return {lvl:"bad",msgs:["unknown symbol – pick one"]};
   if(!(l.lots>0))msgs.push("lots missing");
-  if(!(l.price>0))return {lvl:"bad",msgs:msgs.concat("open price missing")};
+  if(!(l.price>0))return {lvl:"bad",msgs:msgs.concat("open price missing – row cut off at the screen edge? Add the next screenshot, or type the price")};
   const live=liveQuote(l.sym).mid;
   if(isFinite(live)&&Math.abs(l.price/live-1)>0.03)msgs.push(`open price is ${f(Math.abs(l.price/live-1)*100,1)}% from live ${f(live,c.digits)}`);
   l.calc=null;
@@ -674,14 +674,40 @@ function shotCheck(l){
 }
 let SHOT=null;
 function shotStatus(msg){$("#shotBody").innerHTML=`<p class="note">${esc(msg)}</p>`;}
-async function handleShot(blob){
+/* blobs: one or more images. append=true joins them to the list already in the dialog (long position lists
+   need several screenshots while scrolling); rows repeated where two screenshots overlap are dropped. */
+async function handleShot(blobs,append){
+  blobs=[].concat(blobs).filter(Boolean); if(!blobs.length)return;
   const dlg=$("#shotDlg"); if(!dlg.open)dlg.showModal();
+  if(!append)SHOT=null;
   try{
-    const text=await ocrImage(blob,shotStatus);
-    SHOT=parseShot(text); SHOT.text=text;
-    SHOT.legs.forEach(l=>{l.price=l.open;l.use=true;});
+    for(let i=0;i<blobs.length;i++){
+      const text=await ocrImage(blobs[i],m=>shotStatus(blobs.length>1?`Screenshot ${i+1} of ${blobs.length}: ${m}`:m));
+      mergeShot(parseShot(text),text);
+    }
     renderShot();
   }catch(e){$("#shotBody").innerHTML=`<p class="neg">Could not read the screenshot: ${esc(e.message||e)}</p><div class="foot"><span></span><button class="btn" onclick="this.closest('dialog').close()">Close</button></div>`;}
+}
+function mergeShot(p,text){
+  p.legs.forEach(l=>{l.price=l.open;l.use=l.open>0&&l.lots>0;});     // a row cut off at the screen edge has no price: unticked
+  if(!SHOT){SHOT=Object.assign(p,{text,shots:1,dropped:0});return;}
+  const key=l=>[l.sym||l.raw,l.dir,l.lots,l.open].join("|");
+  while(SHOT.legs.length&&!(SHOT.legs[SHOT.legs.length-1].open>0))SHOT.legs.pop();   // the next screenshot shows it whole
+  while(p.legs.length&&!(p.legs[0].open>0))p.legs.shift();                          // cut off at the top of the next one
+  const a=SHOT.legs.map(key), b=p.legs.map(key); let k=Math.min(a.length,b.length);
+  for(;k>0;k--){if(a.slice(a.length-k).every((x,i)=>x===b[i]))break;}               // longest end-of-old == start-of-new
+  SHOT.legs.push(...p.legs.slice(k)); SHOT.dropped+=k; SHOT.shots++;
+  for(const kk in p.acc)if(!isFinite(SHOT.acc[kk]))SHOT.acc[kk]=p.acc[kk];
+  SHOT.text+="\n----- next screenshot -----\n"+text;
+}
+/* the screenshot's own Margin figure tells us whether positions are missing (e.g. below the bottom of the screen) */
+function shotMarginNote(){
+  const acc=SHOT.acc; if(!isFinite(acc.margin))return "";
+  let m=0; for(const l of SHOT.legs)if(l.use&&CAT[l.sym]&&l.lots>0&&l.price>0)m+=marginUSD(CAT[l.sym],l.lots,l.price);
+  const gap=acc.margin-m;
+  if(Math.abs(gap)<=Math.max(1,acc.margin*0.01))return `<p class="pos" style="margin:8px 0">✓ Margin of these rows $${f(m,2)} matches the screenshot's $${f(acc.margin,2)}: no position is missing.</p>`;
+  if(gap>0)return `<p class="warn" style="margin:8px 0"><b>Some positions look missing.</b> The rows here need $${f(m,2)} margin but the screenshot shows $${f(acc.margin,2)} (≈ $${f(gap,2)} more). They are probably below the bottom of the screen: scroll down in MetaTrader, take another screenshot and add it here (Ctrl+V or the button below).</p>`;
+  return `<p class="warn" style="margin:8px 0">The rows here need $${f(m,2)} margin, more than the screenshot's $${f(acc.margin,2)}. A row may be counted twice, or a lot size misread.</p>`;
 }
 function renderShot(){
   const {legs,acc}=SHOT; const opts=Object.keys(CAT).sort().map(k=>`<option value="${k}">`).join("");
@@ -693,12 +719,17 @@ function renderShot(){
       <td><input type="number" step="any" data-sf="price" value="${l.price??""}" style="min-width:90px"></td>
       <td class="mut">${l.cur!=null?f(l.cur,d):"–"}</td><td class="${cls(l.calc)}" data-calc>${l.calc!=null&&isFinite(l.calc)?sg(l.calc,2):"–"}</td><td class="mut">${l.profit!=null?sg(l.profit,2):"–"}</td>
       <td class="chk ${ck.lvl==="ok"?"pos":ck.lvl==="warn"?"warn":"neg"}" data-ck>${ck.lvl==="ok"?"✓ digits check out":esc(ck.msgs.join("; "))}</td></tr>`;}).join("");
-  const nm=legs.filter(l=>l.use).length;
   const hasAcc=isFinite(acc.balance)||isFinite(acc.credit);
+  const joined=SHOT.shots>1?` Joined ${SHOT.shots} screenshots${SHOT.dropped?`, dropped ${SHOT.dropped} row(s) repeated where they overlap`:""}.`:"";
   $("#shotBody").innerHTML=`<datalist id="shotSyms">${opts}</datalist>
-    ${legs.length?`<p class="note">Found ${legs.length} position(s). Check the numbers against your screenshot, fix any misread digit, then apply. TP / SL and holding days you already set are kept per symbol.</p>
-    <div class="tblwrap" style="max-height:52vh"><table><thead><tr><th></th><th>Symbol</th><th>Dir</th><th>Lots</th><th>Open price</th><th>Now</th><th>P/L from prices</th><th>Profit read</th><th style="text-align:left">Check</th></tr></thead><tbody>${rows}</tbody></table></div>`
-    :`<p class="warn">No positions found in this image. It works with the MetaTrader “Trade” screen (phone app or desktop Trade tab). Raw text read:</p><textarea readonly>${esc(SHOT.text)}</textarea>`}
+    ${legs.length?`<p class="note">Found ${legs.length} position(s).${joined} Check the numbers against your screenshot, fix any misread digit, then apply. TP / SL and holding days you already set are kept per symbol.</p>
+    <div class="tblwrap" style="max-height:46vh"><table><thead><tr><th></th><th>Symbol</th><th>Dir</th><th>Lots</th><th>Open price</th><th>Now</th><th>P/L from prices</th><th>Profit read</th><th style="text-align:left">Check</th></tr></thead><tbody>${rows}</tbody></table></div>`
+    :`<p class="warn">No positions found in this image. It works with the MetaTrader “Trade” screen (MT4 / MT5 phone app or desktop Trade tab). Raw text read:</p><textarea readonly>${esc(SHOT.text)}</textarea>`}
+    <div id="shotMargin">${shotMarginNote()}</div>
+    <div class="acctrow">
+      <label class="btn">+ Add another screenshot<input type="file" id="shotMore" accept="image/*" multiple hidden></label>
+      <span class="note">or press Ctrl+V again – for a list longer than one screen</span>
+    </div>
     <div class="acctrow">
       <label><input type="checkbox" id="shotAcc" ${hasAcc?"checked":""}> update balance &amp; credit</label>
       <label>Balance $ <input type="number" step="0.01" id="shotBal" value="${isFinite(acc.balance)?acc.balance:""}"></label>
@@ -711,6 +742,7 @@ function renderShot(){
       <span><button class="btn" id="shotCancel">Cancel</button> <button class="btn primary" id="shotApply" ${legs.length?"":"disabled"}>Fill positions</button></span></div>`;
   $("#shotCancel").onclick=()=>$("#shotDlg").close();
   $("#shotApply").onclick=applyShot;
+  $("#shotMore").onchange=e=>{const fl=[...e.target.files];e.target.value="";handleShot(fl,true);};
 }
 function applyShot(){
   const use=SHOT.legs.filter(l=>l.use);
@@ -722,7 +754,7 @@ function applyShot(){
   if($("#shotAcc")&&$("#shotAcc").checked){const b=$("#shotBal").value,c=$("#shotCred").value;if(b!=="")S.account.balance=+b;if(c!=="")S.account.credit=+c;}
   S.account.asOf=new Date().toLocaleString()+" (screenshot)";
   save(); buildCards(); fetchQuotes(); $("#shotDlg").close();
-  $("#stmtInfo").innerHTML=`Filled ${use.length} trade(s) into ${n} position(s) from a screenshot.`+(isFinite(SHOT.acc.margin)?` Screenshot margin was $${f(SHOT.acc.margin,2)} – compare with the Margin box above.`:"");
+  $("#stmtInfo").innerHTML=`Filled ${use.length} trade(s) into ${n} position(s) from ${SHOT.shots>1?SHOT.shots+" screenshots":"a screenshot"}.`+(isFinite(SHOT.acc.margin)?` Screenshot margin was $${f(SHOT.acc.margin,2)} – compare with the Margin box above.`:"");
 }
 $("#shotBody").addEventListener("input",e=>{
   const t=e.target, tr=t.closest("tr[data-i]"); if(!tr||!t.dataset.sf)return;
@@ -731,15 +763,17 @@ $("#shotBody").addEventListener("input",e=>{
   const ck=shotCheck(l), cell=tr.querySelector("[data-ck]"), pc=tr.querySelector("[data-calc]");
   if(pc){pc.textContent=l.calc!=null&&isFinite(l.calc)?sg(l.calc,2):"–";pc.className=cls(l.calc);}
   cell.className="chk "+(ck.lvl==="ok"?"pos":ck.lvl==="warn"?"warn":"neg"); cell.textContent=ck.lvl==="ok"?"✓ digits check out":ck.msgs.join("; ");
+  $("#shotMargin").innerHTML=shotMarginNote();
 });
-$("#shotFile").addEventListener("change",e=>{const fl=e.target.files[0];if(fl)handleShot(fl);e.target.value="";});
+const shotOpen=()=>$("#shotDlg").open&&SHOT&&SHOT.legs;   // a new image while the review is open is added to it
+$("#shotFile").addEventListener("change",e=>{const fl=[...e.target.files];e.target.value="";handleShot(fl,false);});
 document.addEventListener("paste",e=>{
-  const it=[...(e.clipboardData?.items||[])].find(i=>i.type.startsWith("image/")); if(!it)return;
-  e.preventDefault(); handleShot(it.getAsFile());
+  const its=[...(e.clipboardData?.items||[])].filter(i=>i.type.startsWith("image/")); if(!its.length)return;
+  e.preventDefault(); handleShot(its.map(i=>i.getAsFile()),!!shotOpen());
 });
 document.addEventListener("dragover",e=>{if([...e.dataTransfer.items].some(i=>i.type.startsWith("image/"))){e.preventDefault();document.body.classList.add("dragging");}});
 document.addEventListener("dragleave",e=>{if(!e.relatedTarget)document.body.classList.remove("dragging");});
-document.addEventListener("drop",e=>{document.body.classList.remove("dragging");const fl=[...e.dataTransfer.files].find(x=>x.type.startsWith("image/"));if(fl){e.preventDefault();handleShot(fl);}});
+document.addEventListener("drop",e=>{document.body.classList.remove("dragging");const fl=[...e.dataTransfer.files].filter(x=>x.type.startsWith("image/"));if(fl.length){e.preventDefault();handleShot(fl,!!shotOpen());}});
 
 /* ---------- events ---------- */
 document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>{
